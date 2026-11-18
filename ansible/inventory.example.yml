@@ -1,0 +1,10 @@
+---
+# Copy to inventory.yml (or use `terraform output -raw ansible_inventory`).
+all:
+  vars:
+    ansible_user: ansible
+  children:
+    lvm_hosts:
+      hosts:
+        lvm01:
+          ansible_host: 10.0.10.31

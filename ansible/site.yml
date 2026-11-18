@@ -1,0 +1,13 @@
+---
+- name: Manage physical volumes and volume groups
+  hosts: lvm_hosts
+  become: true
+  tasks:
+    - name: Create the practice volume group
+      ansible.builtin.include_role:
+        name: lvm_demo
+      when: lvm_demo_enabled | bool
+
+    - name: Resize, add and migrate physical volumes
+      ansible.builtin.include_role:
+        name: lvm_pv_vg

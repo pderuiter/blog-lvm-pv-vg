@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: lvm_pv_vg
+  namespace: blog
+  author: Patrick de Ruiter
+  description: Grow PVs after a disk resize, add PVs and migrate data off old PVs with pvmove
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - lvm
+    - storage
+dependencies: []

@@ -1,0 +1,74 @@
+---
+- name: Install LVM tools and growpart
+  ansible.builtin.package:
+    name: "{{ lvm_pv_vg_packages[ansible_facts['os_family']] }}"
+    state: present
+
+- name: Check the variables
+  ansible.builtin.assert:
+    that:
+      - lvm_pv_vg_retire_pvs | length == 0 or lvm_pv_vg_migrate_to | length > 0
+      - lvm_pv_vg_migrate_to not in lvm_pv_vg_retire_pvs
+    fail_msg: "Retiring PVs needs a destination (lvm_pv_vg_migrate_to or lvm_pv_vg_new_pvs) that is not retired itself."
+    quiet: true
+
+# --- Resize a disk (or partition) that was grown at the hypervisor ---------------------------
+- name: Grow the PVs that sit on a larger disk
+  ansible.builtin.include_tasks: resize_pv.yml
+  loop: "{{ lvm_pv_vg_resize_pvs }}"
+  loop_control:
+    loop_var: lvm_pv_vg_pv
+
+# --- Add new disks ----------------------------------------------------------------------------
+- name: Initialise the new disks as physical volumes (pvcreate)
+  community.general.lvm_pv:
+    device: "{{ item }}"
+    state: present
+  loop: "{{ lvm_pv_vg_new_pvs }}"
+
+- name: Add the new physical volumes to the volume group (vgextend)
+  community.general.lvg:
+    vg: "{{ lvm_pv_vg_vg }}"
+    pvs: "{{ lvm_pv_vg_new_pvs }}"
+    remove_extra_pvs: false
+    state: present
+  when: lvm_pv_vg_new_pvs | length > 0
+
+# --- Migrate data off old PVs and remove them -------------------------------------------------
+- name: Read the volume group of every PV
+  ansible.builtin.command:
+    cmd: "pvs --noheadings --separator : --options pv_name,vg_name"
+  register: lvm_pv_vg_pvs
+  changed_when: false
+  when: lvm_pv_vg_retire_pvs | length > 0
+
+- name: Move the data from the old PVs (pvmove)
+  community.general.lvm_pv_move_data:
+    source: "{{ item }}"
+    destination: "{{ lvm_pv_vg_migrate_to }}"
+    auto_answer: true
+  loop: "{{ lvm_pv_vg_retire_pvs }}"
+  when: (item ~ ':' ~ lvm_pv_vg_vg) in (lvm_pv_vg_pvs.stdout_lines | map('trim'))
+
+- name: Remove the old PVs from the volume group (vgreduce)
+  ansible.builtin.command:
+    cmd: "vgreduce {{ lvm_pv_vg_vg }} {{ item }}"
+  loop: "{{ lvm_pv_vg_retire_pvs }}"
+  when: (item ~ ':' ~ lvm_pv_vg_vg) in (lvm_pv_vg_pvs.stdout_lines | map('trim'))
+  changed_when: true
+
+- name: Wipe the LVM label from the old PVs (pvremove)
+  community.general.lvm_pv:
+    device: "{{ item }}"
+    state: absent
+  loop: "{{ lvm_pv_vg_retire_pvs }}"
+
+# --- Use the new space ------------------------------------------------------------------------
+- name: Grow the logical volume and its filesystem (lvresize -r)
+  community.general.lvol:
+    vg: "{{ lvm_pv_vg_vg }}"
+    lv: "{{ lvm_pv_vg_lv }}"
+    size: "{{ lvm_pv_vg_lv_size }}"
+    resizefs: true
+    shrink: false
+  when: lvm_pv_vg_lv | length > 0

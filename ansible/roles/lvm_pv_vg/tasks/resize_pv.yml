@@ -1,0 +1,39 @@
+---
+- name: Find the disk under {{ lvm_pv_vg_pv }}
+  ansible.builtin.command:
+    cmd: "lsblk --noheadings --nodeps --output PKNAME,NAME,TYPE {{ lvm_pv_vg_pv }}"
+  register: lvm_pv_vg_lsblk
+  changed_when: false
+
+- name: Remember the disk and partition number
+  vars:
+    lvm_pv_vg_fields: "{{ lvm_pv_vg_lsblk.stdout.split() }}"
+  ansible.builtin.set_fact:
+    # A disk prints "sdb disk" (no parent), a partition "sdb sdb1 part": the first field is the disk.
+    lvm_pv_vg_disk: "{{ lvm_pv_vg_fields[0] }}"
+    lvm_pv_vg_is_part: "{{ lvm_pv_vg_fields | length == 3 and lvm_pv_vg_fields[2] == 'part' }}"
+
+- name: Read the partition number
+  ansible.builtin.slurp:
+    src: "/sys/class/block/{{ lvm_pv_vg_pv | basename }}/partition"
+  register: lvm_pv_vg_partnum
+  when: lvm_pv_vg_is_part | bool
+
+# Same as: echo 1 > /sys/class/scsi_device/<H:C:T:L>/device/rescan
+- name: Rescan the disk so the kernel sees its new size
+  ansible.builtin.shell:
+    cmd: "echo 1 > /sys/class/block/{{ lvm_pv_vg_disk }}/device/rescan"
+  changed_when: false
+
+- name: Grow the partition to the end of the disk (growpart)
+  ansible.builtin.command:
+    cmd: "growpart /dev/{{ lvm_pv_vg_disk }} {{ lvm_pv_vg_partnum.content | b64decode | trim }}"
+  register: lvm_pv_vg_growpart
+  when: lvm_pv_vg_is_part | bool
+  changed_when: lvm_pv_vg_growpart.rc == 0
+  failed_when: lvm_pv_vg_growpart.rc != 0 and 'NOCHANGE' not in lvm_pv_vg_growpart.stdout
+
+- name: Resize the physical volume (pvresize)
+  community.general.lvm_pv:
+    device: "{{ lvm_pv_vg_pv }}"
+    resize: true

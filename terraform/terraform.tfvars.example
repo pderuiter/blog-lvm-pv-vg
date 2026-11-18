@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and adjust. Never commit real values.
+proxmox_endpoint  = "https://pve.example.com:8006/"
+proxmox_api_token = "terraform@pve!blog=00000000-0000-0000-0000-000000000000"
+node_name         = "pve"
+datastore_id      = "local-lvm"
+gateway           = "10.0.10.1"
+dns_servers       = ["10.0.10.1"]
+ssh_public_key    = "ssh-ed25519 AAAA... you@example.com"
+
+vms = {
+  lvm01 = {
+    addresses = ["10.0.10.31/24"]
+    # sdb and sdc: the two small PVs (PV1, PV2); sdd: the larger disk (PV3) the data moves to.
+    # To try the resize guide afterwards, raise the last size (e.g. 25 -> 35), run
+    # terraform apply, add /dev/sdd to lvm_pv_vg_resize_pvs and run site.yml again.
+    data_disks = [10, 10, 25]
+    groups     = ["lvm_hosts"]
+  }
+}

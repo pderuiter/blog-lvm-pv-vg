@@ -1,0 +1,39 @@
+---
+- name: Install LVM tools
+  ansible.builtin.apt:
+    name: lvm2
+    state: present
+
+- name: Check whether the volume group already exists
+  ansible.builtin.command:
+    cmd: "vgs {{ lvm_demo_vg }}"
+  register: lvm_demo_vgs
+  changed_when: false
+  failed_when: false
+
+# Only on first use: later the post's procedures add, grow and replace the PVs.
+- name: Create the volume group
+  when: lvm_demo_vgs.rc != 0
+  community.general.lvg:
+    vg: "{{ lvm_demo_vg }}"
+    pvs: "{{ lvm_demo_pvs }}"
+    remove_extra_pvs: false
+
+- name: Create the logical volume
+  community.general.lvol:
+    vg: "{{ lvm_demo_vg }}"
+    lv: "{{ lvm_demo_lv }}"
+    size: "{{ lvm_demo_lv_size }}"
+    shrink: false
+
+- name: Create an ext4 filesystem
+  community.general.filesystem:
+    dev: "/dev/{{ lvm_demo_vg }}/{{ lvm_demo_lv }}"
+    fstype: ext4
+
+- name: Mount the filesystem
+  ansible.posix.mount:
+    path: "{{ lvm_demo_mount }}"
+    src: "/dev/mapper/{{ lvm_demo_vg | replace('-', '--') }}-{{ lvm_demo_lv | replace('-', '--') }}"
+    fstype: ext4
+    state: mounted

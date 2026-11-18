@@ -1,0 +1,41 @@
+---
+# The checks from the post (pvs, vgdisplay, lsblk), as assertions. Read-only.
+- name: Verify the volume group
+  hosts: lvm_hosts
+  become: true
+  tasks:
+    - name: List the physical volumes (pvs)
+      ansible.builtin.command:
+        cmd: "pvs --noheadings --separator : --units b --nosuffix --options pv_name,vg_name,pv_size,dev_size,pv_free"
+      register: verify_pvs
+      changed_when: false
+
+    - name: Read the logical volume size
+      ansible.builtin.command:
+        cmd: "lvs --noheadings --units b --nosuffix --options lv_size {{ lvm_pv_vg_vg }}/{{ lvm_pv_vg_lv }}"
+      register: verify_lvs
+      changed_when: false
+      when: lvm_pv_vg_lv | length > 0
+
+    - name: Assert the VG members, the PV sizes and the free space
+      vars:
+        verify_rows: "{{ verify_pvs.stdout_lines | map('trim') | map('split', ':') | list }}"
+        verify_vg_rows: "{{ verify_rows | selectattr('1', 'eq', lvm_pv_vg_vg) | list }}"
+        verify_members: "{{ verify_vg_rows | map('first') | list }}"
+        verify_dev_bytes: "{{ verify_vg_rows | map(attribute='3') | map('int') | sum }}"
+        verify_pv_bytes: "{{ verify_vg_rows | map(attribute='2') | map('int') | sum }}"
+        verify_free_bytes: "{{ verify_vg_rows | map(attribute='4') | map('int') | sum }}"
+      ansible.builtin.assert:
+        that:
+          # the new PVs are in the VG; the retired PVs are gone and carry no LVM label any more
+          - lvm_pv_vg_new_pvs | difference(verify_members) | length == 0
+          - verify_rows | map('first') | intersect(lvm_pv_vg_retire_pvs) | length == 0
+          # every PV uses its whole device (pvresize): at most 4 MiB metadata/alignment per PV
+          - (verify_dev_bytes | int) - (verify_pv_bytes | int) <= 4194304 * (verify_members | length)
+          # +100%FREE leaves nothing unallocated
+          - lvm_pv_vg_lv_size != '+100%FREE' or (verify_free_bytes | int) == 0
+        quiet: true
+
+    - name: Show the physical volumes
+      ansible.builtin.debug:
+        var: verify_pvs.stdout_lines

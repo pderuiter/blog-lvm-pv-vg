@@ -1,0 +1,21 @@
+---
+# Volume group to work on.
+lvm_pv_vg_vg: my_volume_group
+
+# PVs whose disk was grown at the hypervisor (steps 1-4 of the resize guide). A whole disk
+# (/dev/sdb) is rescanned and pvresized; a partition (/dev/sdb1) is rescanned, grown to the
+# end of the disk with growpart and then pvresized.
+lvm_pv_vg_resize_pvs: []
+
+# New disks to initialise and add to the volume group (step 5: pvcreate + vgextend).
+lvm_pv_vg_new_pvs: []
+
+# PVs to retire: their extents are moved with pvmove to lvm_pv_vg_migrate_to, then they are
+# removed from the volume group (vgreduce) and their LVM label is wiped (pvremove).
+lvm_pv_vg_retire_pvs: []
+lvm_pv_vg_migrate_to: "{{ lvm_pv_vg_new_pvs | first | default('') }}"
+
+# Logical volume to grow afterwards, with its filesystem (lvresize -r). An absolute size such
+# as "200g", or "+100%FREE" for all free space. Leave lvm_pv_vg_lv empty to skip this step.
+lvm_pv_vg_lv: ""
+lvm_pv_vg_lv_size: "+100%FREE"

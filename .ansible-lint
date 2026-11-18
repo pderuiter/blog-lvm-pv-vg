@@ -1,0 +1,6 @@
+---
+profile: production
+exclude_paths:
+  - .gitlab-ci.yml
+  - terraform/
+  - ansible/collections/

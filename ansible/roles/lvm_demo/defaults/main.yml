@@ -1,0 +1,10 @@
+---
+# Creates a small LVM setup to practise on: a VG on blank disks with one ext4 LV mounted.
+# Leave lvm_demo_enabled false on a machine that already has the VG you want to grow.
+lvm_demo_enabled: false
+lvm_demo_vg: data-vg
+lvm_demo_pvs:
+  - /dev/sdb
+lvm_demo_lv: lv_data
+lvm_demo_lv_size: 1g
+lvm_demo_mount: /data
