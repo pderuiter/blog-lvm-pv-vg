@@ -10,6 +10,9 @@ variables:
 ansible-lint:
   stage: lint
   image: python:3.13-slim
+  variables:
+    # The build dir is world-writable, so Ansible ignores ansible.cfg there.
+    ANSIBLE_COLLECTIONS_PATH: $CI_PROJECT_DIR/ansible/collections
   before_script:
     - pip install --quiet "ansible-core==2.22.0" "ansible-lint==26.10.1" "yamllint==1.38.0"
     - ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
